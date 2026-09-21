@@ -6,7 +6,7 @@ import(
 )
 
 func hello(w http.ResponseWriter,r *http.Request){
-	fmt.Fprintf(w,"Nothing interesting here yet")
+	fmt.Fprintf(w,"Just new branch test...still nothing interesting...")
 }
 
 func main(){
