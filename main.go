@@ -36,6 +36,7 @@ func ConnToPostgres() (*pgxpool.Pool, error){
 		User: url.UserPassword(user,pass),
 		Host: host,
 		Path: name,
+		RawQuery: "sslmode=disable",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -56,6 +57,22 @@ func main(){
 		fmt.Println("Postgres is working!")
 	}
 	defer pool.Close()
+
+	if err:=pool.Ping(context.Background());err!=nil{
+		fmt.Println("Ping failed:",err)
+	}
+	
+	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
+		id BIGSERIAL PRIMARY KEY,
+		email TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		password TEXT NOT NULL
+	)`)
+	if err!=nil{
+		fmt.Println(err)
+	} else {
+		fmt.Println("Table created!")
+	}
 
 	r:=chi.NewRouter()
 
