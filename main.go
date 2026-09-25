@@ -4,74 +4,26 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
-	"os"
-	"time"
 
+	"goschool/database"
+	"goschool/envget"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 )
 
 func hello(w http.ResponseWriter,r *http.Request){
 	w.Write([]byte("Nothing interesting here yet but i added chi"))
 }
 
-func ConnToPostgres() (*pgxpool.Pool, error){
-	user:=os.Getenv("POSTGRES_USER")
-	pass:=os.Getenv("POSTGRES_PASSWORD")
-	name:=os.Getenv("POSTGRES_DB")
-	host:=os.Getenv("POSTGRES_HOST")
-
-	if host==""{
-		host="localhost:5432"
-	}
-
-	if user== "" || pass== "" || name == "" {
-		return nil, fmt.Errorf("POSTGRES_USER,POSTGRES_PASSWORD and POSTGRES_DB must be set")
-	}
-
-	u:=url.URL{
-		Scheme: "postgres",
-		User: url.UserPassword(user,pass),
-		Host: host,
-		Path: name,
-		RawQuery: "sslmode=disable",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	return pgxpool.New(ctx, u.String())
-}
-
 func main(){
-	if err:=godotenv.Load();err!=nil{
-		fmt.Println("no .env file found")
-	}
-
-	pool,err:=ConnToPostgres()
+	pool,err:=database.Connect(envget.GetPostgresReqs())
 	if err!=nil{
-		fmt.Println(err)
-	} else {
-		fmt.Println("Postgres is working!")
+		fmt.Println("Error conecting Postgres:",err)
 	}
 	defer pool.Close()
 
-	if err:=pool.Ping(context.Background());err!=nil{
-		fmt.Println("Ping failed:",err)
-	}
-	
-	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
-		id BIGSERIAL PRIMARY KEY,
-		email TEXT NOT NULL UNIQUE,
-		name TEXT NOT NULL,
-		password TEXT NOT NULL
-	)`)
+	err=pool.Ping(context.Background())
 	if err!=nil{
-		fmt.Println(err)
-	} else {
-		fmt.Println("Table created!")
+		fmt.Println("Ping error:",err)
 	}
 
 	r:=chi.NewRouter()
