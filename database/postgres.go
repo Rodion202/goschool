@@ -59,3 +59,36 @@ func Connect(p *models.PostgresReqs) (*pgxpool.Pool,error) {
 	}
 	return pool, nil
 }
+
+func ConnectDrop(p *models.PostgresReqs) (*pgxpool.Pool,error) {
+	pool,err:=ConnToPostgres(p)
+	if err!=nil{
+		return nil,err
+	} else {
+		fmt.Println("Postgres is working!")
+	}
+
+	if err:=pool.Ping(context.Background());err!=nil{
+		fmt.Println("Ping failed:",err)
+	}
+
+	 _,err=pool.Exec(context.Background(),`DROP TABLE IF EXISTS users`)
+	if err!=nil{
+		return nil,err
+	} else {
+		fmt.Println("Table users dropped!")
+	}
+	
+	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
+		id BIGSERIAL PRIMARY KEY,
+		email TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		password TEXT NOT NULL
+	)`)
+	if err!=nil{
+		return nil,err
+	} else {
+		fmt.Println("Table created!")
+	}
+	return pool, nil
+}
