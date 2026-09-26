@@ -1,14 +1,84 @@
 package database
 
-import(
+import (
 	"context"
-	"time"
-	"net/url"
+	"errors"
 	"fmt"
+	"net/url"
+	"time"
+
 	//"os"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"goschool/models"
+
+	//"github.com/jack/pgx/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type Database struct{
+	Pool *pgxpool.Pool
+}
+
+func (d Database)Ping()error{
+	err:=d.Pool.Ping(context.Background())
+	if err!=nil{
+		return err
+	}
+	return nil
+}
+
+func (d Database)Close(){
+	if d.Pool !=nil{
+		d.Pool.Close()
+	}
+}
+
+func (d Database)AddUser(u models.User)error {
+	_,err:=d.Pool.Exec(context.Background(),`INSERT INTO users (email, name, password) VALUES ($1,$2,$3)`,u.Email,u.Name,u.Password)
+	if err!=nil{
+		return err
+	}
+	return nil
+}
+
+func (d Database)GetUserById(id string)(*models.User,error){
+	var u models.User
+	err:=d.Pool.QueryRow(context.Background(),`SELECT id,email,name,password FROM users WHERE id = $1`,id).Scan(&u.Id,&u.Email,&u.Name,&u.Password)
+	if err!=nil{
+		if errors.Is(err,pgx.ErrNoRows){
+			return nil,fmt.Errorf("There is no user with id %s",id)
+		}
+	}
+	return &u,nil
+}
+
+func (d Database)GetAllUsers()(*[]models.User, error){
+	rows,err:=d.Pool.Query(context.Background(),`SELECT id, email, name, password FROM users`)
+	if err!=nil{
+		return nil,fmt.Errorf("Error %w",err) 
+	}
+	defer rows.Close()
+	var users []models.User
+	for rows.Next(){
+		var u models.User
+
+		err:=rows.Scan(&u.Id,&u.Email,&u.Name,&u.Password)
+		if err!=nil{
+			return nil, fmt.Errorf("Error %w",err)
+		}
+
+		users = append(users, u)
+	}
+	return &users, nil
+}
+
+func (d Database)DeleteUserById(id string)error{
+	_,err:=d.Pool.Exec(context.Background(),`DELETE FROM users WHERE id = $1`,id)
+	if err!=nil{
+		return err
+	}
+	return nil
+}
 
 func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
 	if p.Host==""{
@@ -34,7 +104,7 @@ func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
 	return pgxpool.New(ctx, u.String())
 }
 
-func Connect(p *models.PostgresReqs) (*pgxpool.Pool,error) {
+func Connect(p *models.PostgresReqs) (models.Storage,error) {
 	pool,err:=ConnToPostgres(p)
 	if err!=nil{
 		return nil,err
@@ -57,10 +127,11 @@ func Connect(p *models.PostgresReqs) (*pgxpool.Pool,error) {
 	} else {
 		fmt.Println("Table created!")
 	}
-	return pool, nil
+	db:=Database{Pool:pool}
+	return db, nil
 }
 
-func ConnectDrop(p *models.PostgresReqs) (*pgxpool.Pool,error) {
+func ConnectDrop(p *models.PostgresReqs) (models.Storage,error) {
 	pool,err:=ConnToPostgres(p)
 	if err!=nil{
 		return nil,err
@@ -90,5 +161,6 @@ func ConnectDrop(p *models.PostgresReqs) (*pgxpool.Pool,error) {
 	} else {
 		fmt.Println("Table created!")
 	}
-	return pool, nil
+	db:=Database{Pool: pool}
+	return db, nil
 }

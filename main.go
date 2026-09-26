@@ -1,16 +1,17 @@
 package main
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	"net/http"
 	"os"
 
 	"goschool/database"
 	"goschool/envget"
+	"goschool/models"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+  //"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func hello(w http.ResponseWriter,r *http.Request){
@@ -29,22 +30,17 @@ func isArgumented()bool{
 }
 
 func main(){
-	var pool *pgxpool.Pool
+	var storage models.Storage
 	var err error
 	if isArgumented() {
-		pool,err=database.ConnectDrop(envget.GetPostgresReqs())
+		storage,err=database.ConnectDrop(envget.GetPostgresReqs())
 	} else {
-	pool,err=database.Connect(envget.GetPostgresReqs())
+	storage,err=database.Connect(envget.GetPostgresReqs())
 }
 	if err!=nil{
 		fmt.Println("Error conecting Postgres:",err)
 	}
-	defer pool.Close()
-
-	err=pool.Ping(context.Background())
-	if err!=nil{
-		fmt.Println("Ping error:",err)
-	}
+	defer storage.Close()
 
 	r:=chi.NewRouter()
 
