@@ -15,7 +15,7 @@ type UserMessage struct{
 type Storage interface{
  AddUser(User)error
  GetUserById(string)(*User,error)
- GetAllUsers()(*[]User, error)
+ GetAllUsers()([]User, error)
  DeleteUserById(string)error
  Close()
  Ping()error

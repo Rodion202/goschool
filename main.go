@@ -1,17 +1,14 @@
 package main
 
 import (
-	//"context"
 	"fmt"
 	"net/http"
 	"os"
 
 	"goschool/database"
 	"goschool/envget"
-	"goschool/models"
 
 	"github.com/go-chi/chi/v5"
-  //"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func hello(w http.ResponseWriter,r *http.Request){
@@ -30,13 +27,7 @@ func isArgumented()bool{
 }
 
 func main(){
-	var storage models.Storage
-	var err error
-	if isArgumented() {
-		storage,err=database.ConnectDrop(envget.GetPostgresReqs())
-	} else {
-	storage,err=database.Connect(envget.GetPostgresReqs())
-}
+	storage,err:=database.Connect(envget.GetPostgresReqs(),isArgumented())
 	if err!=nil{
 		fmt.Println("Error conecting Postgres:",err)
 	}

@@ -7,10 +7,8 @@ import (
 	"net/url"
 	"time"
 
-	//"os"
 	"goschool/models"
 
-	//"github.com/jack/pgx/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -52,7 +50,7 @@ func (d Database)GetUserById(id string)(*models.User,error){
 	return &u,nil
 }
 
-func (d Database)GetAllUsers()(*[]models.User, error){
+func (d Database)GetAllUsers()([]models.User, error){
 	rows,err:=d.Pool.Query(context.Background(),`SELECT id, email, name, password FROM users`)
 	if err!=nil{
 		return nil,fmt.Errorf("Error %w",err) 
@@ -69,7 +67,7 @@ func (d Database)GetAllUsers()(*[]models.User, error){
 
 		users = append(users, u)
 	}
-	return &users, nil
+	return users, nil
 }
 
 func (d Database)DeleteUserById(id string)error{
@@ -104,7 +102,7 @@ func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
 	return pgxpool.New(ctx, u.String())
 }
 
-func Connect(p *models.PostgresReqs) (models.Storage,error) {
+func Connect(p *models.PostgresReqs, drop bool) (models.Storage,error) {
 	pool,err:=ConnToPostgres(p)
 	if err!=nil{
 		return nil,err
@@ -114,6 +112,15 @@ func Connect(p *models.PostgresReqs) (models.Storage,error) {
 
 	if err:=pool.Ping(context.Background());err!=nil{
 		fmt.Println("Ping failed:",err)
+	}
+
+	if drop {
+		_,err=pool.Exec(context.Background(),`DROP TABLE IF EXISTS users`)
+	if err!=nil{
+		return nil,err
+	} else {
+		fmt.Println("Table users dropped!")
+	}
 	}
 	
 	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
@@ -128,39 +135,5 @@ func Connect(p *models.PostgresReqs) (models.Storage,error) {
 		fmt.Println("Table created!")
 	}
 	db:=Database{Pool:pool}
-	return db, nil
-}
-
-func ConnectDrop(p *models.PostgresReqs) (models.Storage,error) {
-	pool,err:=ConnToPostgres(p)
-	if err!=nil{
-		return nil,err
-	} else {
-		fmt.Println("Postgres is working!")
-	}
-
-	if err:=pool.Ping(context.Background());err!=nil{
-		fmt.Println("Ping failed:",err)
-	}
-
-	 _,err=pool.Exec(context.Background(),`DROP TABLE IF EXISTS users`)
-	if err!=nil{
-		return nil,err
-	} else {
-		fmt.Println("Table users dropped!")
-	}
-	
-	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
-		id BIGSERIAL PRIMARY KEY,
-		email TEXT NOT NULL UNIQUE,
-		name TEXT NOT NULL,
-		password TEXT NOT NULL
-	)`)
-	if err!=nil{
-		return nil,err
-	} else {
-		fmt.Println("Table created!")
-	}
-	db:=Database{Pool: pool}
 	return db, nil
 }
