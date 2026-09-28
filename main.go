@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"goschool/database"
+	"goschool/handlers"
 	//"goschool/envget"
 
 	"github.com/go-chi/chi/v5"
@@ -33,9 +34,16 @@ func main(){
 	}
 	defer storage.Close()
 
+	hs:=handlers.NewStorageHandler(storage)
+
 	r:=chi.NewRouter()
 
 	r.Get("/",hello)
+
+	r.Route("/users",func(r chi.Router) {
+	r.Get("/",hs.GetAllUsers)
+	r.Post("/",hs.AddUser)
+})
 	
 	fmt.Println("http://localhost:8080/")
 	if err:=http.ListenAndServe(":8080",r);err!=nil{
