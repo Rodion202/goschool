@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"goschool/models"
+	"goschool/envget"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -102,7 +103,8 @@ func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
 	return pgxpool.New(ctx, u.String())
 }
 
-func Connect(p *models.PostgresReqs, drop bool) (models.Storage,error) {
+func Connect(drop bool) (models.Storage,error) {
+	p:=envget.GetPostgresReqs()
 	pool,err:=ConnToPostgres(p)
 	if err!=nil{
 		return nil,err

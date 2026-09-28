@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"goschool/database"
-	"goschool/envget"
+	//"goschool/envget"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -27,7 +27,7 @@ func isArgumented()bool{
 }
 
 func main(){
-	storage,err:=database.Connect(envget.GetPostgresReqs(),isArgumented())
+	storage,err:=database.Connect(isArgumented())
 	if err!=nil{
 		fmt.Println("Error conecting Postgres:",err)
 	}
