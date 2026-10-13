@@ -2,68 +2,76 @@ package database
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"time"
 
-	"goschool/models"
 	"goschool/envget"
+	"goschool/models"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Database struct{
+type Database struct {
 	Pool *pgxpool.Pool
 }
 
-func (d Database)Ping()error{
-	err:=d.Pool.Ping(context.Background())
-	if err!=nil{
+func (d Database) Ping() error {
+	err := d.Pool.Ping(context.Background())
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d Database)Close(){
-	if d.Pool !=nil{
+func (d Database) Close() {
+	if d.Pool != nil {
 		d.Pool.Close()
 	}
 }
 
-func (d Database)AddUser(u models.User)error {
-	_,err:=d.Pool.Exec(context.Background(),`INSERT INTO users (email, name, password) VALUES ($1,$2,$3)`,u.Email,u.Name,u.Password)
-	if err!=nil{
-		return err
+func (d Database) GetUserByEmail(email string) (*models.User, error) {
+	var user models.User
+	row := d.Pool.QueryRow(context.Background(), `SELECT id,name,email,password,role FROM users WHERE email = $1`, email)
+	err := row.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Role)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return &user, nil
 }
 
-func (d Database)GetUserById(id string)(*models.User,error){
+func (d Database) AddUser(u *models.User) error {
+	return d.Pool.QueryRow(context.Background(),
+		`INSERT INTO users (name, email, password)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+		u.Name, u.Email, u.Password,
+	).Scan(&u.Id)
+}
+
+func (d Database) GetUserById(id string) (*models.User, error) {
 	var u models.User
-	err:=d.Pool.QueryRow(context.Background(),`SELECT id,email,name,password FROM users WHERE id = $1`,id).Scan(&u.Id,&u.Email,&u.Name,&u.Password)
-	if err!=nil{
-		if errors.Is(err,pgx.ErrNoRows){
-			return nil,fmt.Errorf("There is no user with id %s",id)
-		}
+	row := d.Pool.QueryRow(context.Background(), `SELECT id,email,name,password,role FROM users WHERE id = $1`, id)
+	err := row.Scan(&u.Id, &u.Email, &u.Name, &u.Password, &u.Role)
+	if err != nil {
+		return nil, err
 	}
-	return &u,nil
+	return &u, nil
 }
 
-func (d Database)GetAllUsers()([]models.User, error){
-	rows,err:=d.Pool.Query(context.Background(),`SELECT id, email, name, password FROM users`)
-	if err!=nil{
-		return nil,fmt.Errorf("Error %w",err) 
+func (d Database) GetAllUsers() ([]models.User, error) {
+	rows, err := d.Pool.Query(context.Background(), `SELECT id, email, name, password FROM users`)
+	if err != nil {
+		return nil, fmt.Errorf("error %w", err)
 	}
 	defer rows.Close()
 	var users []models.User
-	for rows.Next(){
+	for rows.Next() {
 		var u models.User
 
-		err:=rows.Scan(&u.Id,&u.Email,&u.Name,&u.Password)
-		if err!=nil{
-			return nil, fmt.Errorf("Error %w",err)
+		err := rows.Scan(&u.Id, &u.Email, &u.Name, &u.Password)
+		if err != nil {
+			return nil, fmt.Errorf("error %w", err)
 		}
 
 		users = append(users, u)
@@ -71,31 +79,30 @@ func (d Database)GetAllUsers()([]models.User, error){
 	return users, nil
 }
 
-func (d Database)DeleteUserById(id string)error{
-	_,err:=d.Pool.Exec(context.Background(),`DELETE FROM users WHERE id = $1`,id)
-	if err!=nil{
+func (d Database) DeleteUserById(id string) error {
+	_, err := d.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
-	if p.Host==""{
-		p.Host="localhost:5432"
+func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error) {
+	if p.Host == "" {
+		p.Host = "localhost:5432"
 	}
 
-	if p.User== "" || p.Pass== "" || p.Name == "" {
+	if p.User == "" || p.Pass == "" || p.Name == "" {
 		return nil, fmt.Errorf("POSTGRES_USER,POSTGRES_PASSWORD and POSTGRES_DB must be set")
 	}
 
-	u:=url.URL{
-		Scheme: "postgres",
-		User: url.UserPassword(p.User,p.Pass),
-		Host: p.Host,
-		Path: p.Name,
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(p.User, p.Pass),
+		Host:     p.Host,
+		Path:     p.Name,
 		RawQuery: "sslmode=disable",
 	}
-
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -103,39 +110,44 @@ func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error){
 	return pgxpool.New(ctx, u.String())
 }
 
-func Connect(drop bool) (models.Storage,error) {
-	p:=envget.GetPostgresReqs()
-	pool,err:=ConnToPostgres(p)
-	if err!=nil{
-		return nil,err
-	} else {
-		fmt.Println("Postgres is working!")
+func Connect(drop bool) (models.Storage, error) {
+	p := envget.GetPostgresReqs()
+	pool, err := ConnToPostgres(p)
+	if err != nil {
+		return nil, err
 	}
-
-	if err:=pool.Ping(context.Background());err!=nil{
-		fmt.Println("Ping failed:",err)
+	if err := pool.Ping(context.Background()); err != nil {
+		fmt.Println("Ping failed:", err)
+		return nil, err
 	}
+	fmt.Println("Postgres is working!")
 
 	if drop {
-		_,err=pool.Exec(context.Background(),`DROP TABLE IF EXISTS users`)
-	if err!=nil{
-		return nil,err
-	} else {
+		_, err = pool.Exec(context.Background(), `DROP TABLE IF EXISTS users`)
+		if err != nil {
+			return nil, err
+		}
 		fmt.Println("Table users dropped!")
 	}
-	}
-	
-	_,err=pool.Exec(context.Background(),`CREATE TABLE IF NOT EXISTS users (
+
+	_, err = pool.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY,
 		email TEXT NOT NULL UNIQUE,
 		name TEXT NOT NULL,
-		password TEXT NOT NULL
+		password TEXT NOT NULL,
+		role TEXT NOT NULL DEFAULT 'student'
 	)`)
-	if err!=nil{
-		return nil,err
-	} else {
-		fmt.Println("Table created!")
+
+	if err != nil {
+		return nil, err
 	}
-	db:=Database{Pool:pool}
+	fmt.Println("Table created!")
+
+	db := Database{Pool: pool}
+	err = db.AddUser(&models.User{Email: "roro", Name: "Roro", Password: "roro", Role: models.RoleAdmin})
+	if err != nil {
+		fmt.Println("Error creating admin:", err)
+	}
 	return db, nil
 }

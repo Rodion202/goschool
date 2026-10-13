@@ -2,51 +2,48 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 
 	"goschool/database"
 	"goschool/handlers"
-	//"goschool/envget"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 )
 
-func hello(w http.ResponseWriter,r *http.Request){
-	w.Write([]byte("Nothing interesting here yet but i added chi"))
+func hello(c *gin.Context) {
+	c.JSON(200, gin.H{"message": "hello!"})
 }
 
-func isArgumented()bool{
-	if len(os.Args)<2{
+func hasDropFlag() bool {
+	if len(os.Args) < 2 {
 		return false
-	} else {
-		if os.Args[1]=="drop"{
-			return true
-		}
 	}
-	return false
+	return os.Args[1] == "drop"
 }
 
-func main(){
-	storage,err:=database.Connect(isArgumented())
-	if err!=nil{
-		fmt.Println("Error conecting Postgres:",err)
+func main() {
+	storage, err := database.Connect(hasDropFlag())
+	if err != nil {
+		fmt.Println("Error conecting Postgres:", err)
 	}
 	defer storage.Close()
 
-	hs:=handlers.NewStorageHandler(storage)
+	hs := handlers.NewStorageHandler(storage)
 
-	r:=chi.NewRouter()
+	r := gin.Default()
 
-	r.Get("/",hello)
+	r.GET("/", hello)
 
-	r.Route("/users",func(r chi.Router) {
-	r.Get("/",hs.GetAllUsers)
-	r.Post("/",hs.AddUser)
-})
-	
+	usersRouter := r.Group("/users")
+	{
+		usersRouter.GET("/", hs.GetAllUsers)
+		usersRouter.POST("/", hs.AddUser)
+		usersRouter.POST("/login", hs.Login)
+	}
+
 	fmt.Println("http://localhost:8080/")
-	if err:=http.ListenAndServe(":8080",r);err!=nil{
-		fmt.Println("Oops:",err)
+	if err := r.Run(":8080"); err != nil {
+		fmt.Println(err)
+		panic(err)
 	}
 }

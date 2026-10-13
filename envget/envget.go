@@ -1,15 +1,15 @@
 package envget
 
-import(
+import (
 	"fmt"
-	"os"
 	"goschool/models"
+	"os"
+
 	"github.com/joho/godotenv"
 )
 
-
-func GetPostgresReqs() *models.PostgresReqs{
-	if err:=godotenv.Load();err!=nil{
+func GetPostgresReqs() *models.PostgresReqs {
+	if err := godotenv.Load(); err != nil {
 		fmt.Println("No .env file found")
 	}
 	return &models.PostgresReqs{
