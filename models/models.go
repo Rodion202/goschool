@@ -1,5 +1,7 @@
 package models
 
+import "context"
+
 var (
 	RoleAdmin   = "admin"
 	RoleStudent = "student"
@@ -7,7 +9,7 @@ var (
 )
 
 type User struct {
-	Id       string `json:"id"`
+	Id       int64  `json:"id"`
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
@@ -19,17 +21,18 @@ type LoginInput struct {
 	Password string `json:"password"`
 }
 type UserMessage struct {
-	Id    string `json:"id"`
+	Id    int64  `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	Role  string `json:"role"`
 }
 
 type Storage interface {
-	AddUser(*User) error
-	GetUserById(string) (*User, error)
-	GetAllUsers() ([]User, error)
-	DeleteUserById(string) error
-	GetUserByEmail(string) (*User, error)
+	AddUser(context.Context, *User) error
+	GetUserById(context.Context, string) (*User, error)
+	GetAllUsers(context.Context) ([]User, error)
+	DeleteUserById(context.Context, string) error
+	GetUserByEmail(context.Context, string) (*User, error)
 	Close()
 	Ping() error
 }

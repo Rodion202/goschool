@@ -39,13 +39,14 @@ func SendJsonError(c *gin.Context, message string, statusCode int) {
 
 func (hs *StorageHandler) Login(c *gin.Context) {
 	var input models.LoginInput
+	ctx := c.Request.Context()
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		SendJsonError(c, "invalid input", http.StatusBadRequest)
 		return
 	}
 
-	user, err := hs.s.GetUserByEmail(input.Email)
+	user, err := hs.s.GetUserByEmail(ctx, input.Email)
 	if err != nil {
 		SendJsonError(c, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -68,20 +69,22 @@ func (hs *StorageHandler) Login(c *gin.Context) {
 }
 
 func (hs *StorageHandler) GetAllUsers(c *gin.Context) {
-	users, err := hs.s.GetAllUsers()
+	ctx := c.Request.Context()
+	users, err := hs.s.GetAllUsers(ctx)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to GetAllUsers")
 		return
 	}
 	usermessage := make([]models.UserMessage, len(users))
 	for i, user := range users {
-		usermessage[i] = models.UserMessage{Id: user.Id, Name: user.Name, Email: user.Email}
+		usermessage[i] = models.UserMessage{Id: user.Id, Name: user.Name, Email: user.Email, Role: user.Role}
 	}
 	c.JSON(http.StatusOK, usermessage)
 }
 
 func (hs *StorageHandler) AddUser(c *gin.Context) {
 	var user models.User
+	ctx := c.Request.Context()
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.String(http.StatusBadRequest, err.Error())
 		return
@@ -95,14 +98,15 @@ func (hs *StorageHandler) AddUser(c *gin.Context) {
 
 	user.Password = hash
 
-	err = hs.s.AddUser(&user)
+	err = hs.s.AddUser(ctx, &user)
 	if err != nil {
-		SendJsonError(c, "Внутренняя ошибка сервера. Попробуйте позже", http.StatusInternalServerError)
+		SendJsonError(c, "Внутренняя ошибка сервера. Попробуйте позже"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	c.JSON(http.StatusCreated, models.UserMessage{
 		Id:    user.Id,
 		Name:  user.Name,
 		Email: user.Email,
+		Role:  user.Role,
 	})
 }

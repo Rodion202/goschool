@@ -17,11 +17,7 @@ type Database struct {
 }
 
 func (d Database) Ping() error {
-	err := d.Pool.Ping(context.Background())
-	if err != nil {
-		return err
-	}
-	return nil
+	return d.Pool.Ping(context.Background())
 }
 
 func (d Database) Close() {
@@ -30,9 +26,9 @@ func (d Database) Close() {
 	}
 }
 
-func (d Database) GetUserByEmail(email string) (*models.User, error) {
+func (d Database) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
-	row := d.Pool.QueryRow(context.Background(), `SELECT id,name,email,password,role FROM users WHERE email = $1`, email)
+	row := d.Pool.QueryRow(ctx, `SELECT id,name,email,password,role FROM users WHERE email = $1`, email)
 	err := row.Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Role)
 	if err != nil {
 		return nil, err
@@ -40,18 +36,20 @@ func (d Database) GetUserByEmail(email string) (*models.User, error) {
 	return &user, nil
 }
 
-func (d Database) AddUser(u *models.User) error {
-	return d.Pool.QueryRow(context.Background(),
-		`INSERT INTO users (name, email, password)
-         VALUES ($1, $2, $3)
-         RETURNING id`,
-		u.Name, u.Email, u.Password,
-	).Scan(&u.Id)
+func (d Database) AddUser(ctx context.Context, u *models.User) error {
+	if u.Role == "" {
+		u.Role = "student"
+	}
+	return d.Pool.QueryRow(
+		ctx,
+		`INSERT INTO users (name, email, password,role) VALUES ($1, $2, $3, $4) RETURNING id,role`,
+		u.Name, u.Email, u.Password, u.Role,
+	).Scan(&u.Id, &u.Role)
 }
 
-func (d Database) GetUserById(id string) (*models.User, error) {
+func (d Database) GetUserById(ctx context.Context, id string) (*models.User, error) {
 	var u models.User
-	row := d.Pool.QueryRow(context.Background(), `SELECT id,email,name,password,role FROM users WHERE id = $1`, id)
+	row := d.Pool.QueryRow(ctx, `SELECT id,email,name,password,role FROM users WHERE id = $1`, id)
 	err := row.Scan(&u.Id, &u.Email, &u.Name, &u.Password, &u.Role)
 	if err != nil {
 		return nil, err
@@ -59,8 +57,8 @@ func (d Database) GetUserById(id string) (*models.User, error) {
 	return &u, nil
 }
 
-func (d Database) GetAllUsers() ([]models.User, error) {
-	rows, err := d.Pool.Query(context.Background(), `SELECT id, email, name, password FROM users`)
+func (d Database) GetAllUsers(ctx context.Context) ([]models.User, error) {
+	rows, err := d.Pool.Query(ctx, `SELECT id, email, name, password,role FROM users`)
 	if err != nil {
 		return nil, fmt.Errorf("error %w", err)
 	}
@@ -69,7 +67,7 @@ func (d Database) GetAllUsers() ([]models.User, error) {
 	for rows.Next() {
 		var u models.User
 
-		err := rows.Scan(&u.Id, &u.Email, &u.Name, &u.Password)
+		err := rows.Scan(&u.Id, &u.Email, &u.Name, &u.Password, &u.Role)
 		if err != nil {
 			return nil, fmt.Errorf("error %w", err)
 		}
@@ -79,8 +77,8 @@ func (d Database) GetAllUsers() ([]models.User, error) {
 	return users, nil
 }
 
-func (d Database) DeleteUserById(id string) error {
-	_, err := d.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+func (d Database) DeleteUserById(ctx context.Context, id string) error {
+	_, err := d.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -116,21 +114,25 @@ func Connect(drop bool) (models.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := pool.Ping(context.Background()); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := pool.Ping(ctx); err != nil {
 		fmt.Println("Ping failed:", err)
 		return nil, err
 	}
 	fmt.Println("Postgres is working!")
 
 	if drop {
-		_, err = pool.Exec(context.Background(), `DROP TABLE IF EXISTS users`)
+		_, err = pool.Exec(ctx, `DROP TABLE IF EXISTS users`)
 		if err != nil {
 			return nil, err
 		}
 		fmt.Println("Table users dropped!")
 	}
 
-	_, err = pool.Exec(context.Background(), `
+	_, err = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY,
 		email TEXT NOT NULL UNIQUE,
@@ -145,9 +147,10 @@ func Connect(drop bool) (models.Storage, error) {
 	fmt.Println("Table created!")
 
 	db := Database{Pool: pool}
-	err = db.AddUser(&models.User{Email: "roro", Name: "Roro", Password: "roro", Role: models.RoleAdmin})
+
+	err = db.AddUser(ctx, &models.User{Email: "roro", Name: "Roro", Password: "roro", Role: models.RoleAdmin})
 	if err != nil {
 		fmt.Println("Error creating admin:", err)
 	}
-	return db, nil
+	return &db, nil
 }
