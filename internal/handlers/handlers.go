@@ -1,7 +1,8 @@
 package handlers
 
 import (
-	"goschool/models"
+	"goschool/internal/auth"
+	"goschool/internal/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,15 +10,8 @@ import (
 )
 
 type StorageHandler struct {
-	s models.Storage
-}
-
-func hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), err
+	s         models.Storage
+	jwtSecret []byte
 }
 
 func comparePasswords(hashedPwd string, plainPwd string) bool {
@@ -29,8 +23,8 @@ type ErrorResp struct {
 	Err string `json:"error"`
 }
 
-func NewStorageHandler(storage models.Storage) *StorageHandler {
-	return &StorageHandler{s: storage}
+func NewStorageHandler(storage models.Storage, secret []byte) *StorageHandler {
+	return &StorageHandler{s: storage, jwtSecret: secret}
 }
 
 func SendJsonError(c *gin.Context, message string, statusCode int) {
@@ -47,7 +41,7 @@ func (hs *StorageHandler) Login(c *gin.Context) {
 	}
 
 	user, err := hs.s.GetUserByEmail(ctx, input.Email)
-	if err != nil {
+	if err != nil || user == nil {
 		SendJsonError(c, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -57,7 +51,7 @@ func (hs *StorageHandler) Login(c *gin.Context) {
 		return
 	}
 
-	jwtToken, err := GenerateJWT(user.Id, user.Role)
+	jwtToken, err := GenerateJWT(hs.jwtSecret, user.Id, user.Role)
 	if err != nil {
 		SendJsonError(c, "could not generate token", http.StatusInternalServerError)
 		return
@@ -90,7 +84,7 @@ func (hs *StorageHandler) AddUser(c *gin.Context) {
 		return
 	}
 
-	hash, err := hashPassword(user.Password)
+	hash, err := auth.HashPassword(user.Password)
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return

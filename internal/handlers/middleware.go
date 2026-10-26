@@ -3,52 +3,41 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 )
 
-func AuthMiddleware() gin.HandlerFunc {
+func AuthMiddleware(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.Request.Header.Get("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatus(http.StatusUnauthorized)
+		parts := strings.SplitN(c.GetHeader("Authorization"), " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResp{Err: "missing or malformed authorization header"})
 			return
 		}
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		tokenString := parts[1]
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(parts[1], claims, func(token *jwt.Token) (interface{}, error) {
+			if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return jwtSecret, nil
+			return secret, nil
 		})
+		if err != nil || !token.Valid {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResp{Err: "invalid token"})
+			return
+		}
+
+		userId, err := strconv.ParseInt(claims.Subject, 10, 64)
 		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResp{Err: "invalid token"})
 			return
 		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		userId, ok := claims["sub"].(string)
-		if !ok {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		role, ok := claims["role"].([]interface{})
-		if !ok {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
+
 		c.Set("userId", userId)
-		c.Set("role", role)
+		c.Set("role", claims.Role)
 		c.Next()
 	}
 }

@@ -3,11 +3,9 @@ package database
 import (
 	"context"
 	"fmt"
+	"goschool/internal/models"
 	"net/url"
 	"time"
-
-	"goschool/envget"
-	"goschool/models"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,7 +45,7 @@ func (d Database) AddUser(ctx context.Context, u *models.User) error {
 	).Scan(&u.Id, &u.Role)
 }
 
-func (d Database) GetUserById(ctx context.Context, id string) (*models.User, error) {
+func (d Database) GetUserById(ctx context.Context, id int64) (*models.User, error) {
 	var u models.User
 	row := d.Pool.QueryRow(ctx, `SELECT id,email,name,password,role FROM users WHERE id = $1`, id)
 	err := row.Scan(&u.Id, &u.Email, &u.Name, &u.Password, &u.Role)
@@ -58,7 +56,7 @@ func (d Database) GetUserById(ctx context.Context, id string) (*models.User, err
 }
 
 func (d Database) GetAllUsers(ctx context.Context) ([]models.User, error) {
-	rows, err := d.Pool.Query(ctx, `SELECT id, email, name, password,role FROM users`)
+	rows, err := d.Pool.Query(ctx, `SELECT id, email, name,role FROM users`)
 	if err != nil {
 		return nil, fmt.Errorf("error %w", err)
 	}
@@ -67,7 +65,7 @@ func (d Database) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	for rows.Next() {
 		var u models.User
 
-		err := rows.Scan(&u.Id, &u.Email, &u.Name, &u.Password, &u.Role)
+		err := rows.Scan(&u.Id, &u.Email, &u.Name, &u.Role)
 		if err != nil {
 			return nil, fmt.Errorf("error %w", err)
 		}
@@ -77,7 +75,7 @@ func (d Database) GetAllUsers(ctx context.Context) ([]models.User, error) {
 	return users, nil
 }
 
-func (d Database) DeleteUserById(ctx context.Context, id string) error {
+func (d Database) DeleteUserById(ctx context.Context, id int64) error {
 	_, err := d.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return err
@@ -85,20 +83,20 @@ func (d Database) DeleteUserById(ctx context.Context, id string) error {
 	return nil
 }
 
-func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error) {
-	if p.Host == "" {
-		p.Host = "localhost:5432"
+func ConnToPostgres(p *models.Config) (*pgxpool.Pool, error) {
+	if p.PGXHost == "" {
+		p.PGXHost = "localhost:5432"
 	}
 
-	if p.User == "" || p.Pass == "" || p.Name == "" {
+	if p.PGXuser == "" || p.PGXpass == "" || p.PGXdb == "" {
 		return nil, fmt.Errorf("POSTGRES_USER,POSTGRES_PASSWORD and POSTGRES_DB must be set")
 	}
 
 	u := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(p.User, p.Pass),
-		Host:     p.Host,
-		Path:     p.Name,
+		User:     url.UserPassword(p.PGXuser, p.PGXpass),
+		Host:     p.PGXHost,
+		Path:     p.PGXdb,
 		RawQuery: "sslmode=disable",
 	}
 
@@ -108,9 +106,8 @@ func ConnToPostgres(p *models.PostgresReqs) (*pgxpool.Pool, error) {
 	return pgxpool.New(ctx, u.String())
 }
 
-func Connect(drop bool) (models.Storage, error) {
-	p := envget.GetPostgresReqs()
-	pool, err := ConnToPostgres(p)
+func Connect(drop bool, config *models.Config) (*Database, error) {
+	pool, err := ConnToPostgres(config)
 	if err != nil {
 		return nil, err
 	}
@@ -148,9 +145,5 @@ func Connect(drop bool) (models.Storage, error) {
 
 	db := Database{Pool: pool}
 
-	err = db.AddUser(ctx, &models.User{Email: "roro", Name: "Roro", Password: "roro", Role: models.RoleAdmin})
-	if err != nil {
-		fmt.Println("Error creating admin:", err)
-	}
 	return &db, nil
 }
